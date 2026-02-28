@@ -1,4 +1,5 @@
 {
+  "id": "/?app=spendtrack",
   "name": "Spend Tracker",
   "short_name": "SpendTrack",
   "description": "Track your daily spending. Personal finance app with real-time sync.",
