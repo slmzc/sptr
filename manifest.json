@@ -1,21 +1,15 @@
 {
-  "id": "/?app=spendtrack",
-  "name": "Spend Tracker",
-  "short_name": "SpendTrack",
-  "description": "Track your daily spending. Personal finance app with real-time sync.",
+  "id": "/?app=pwatest",
+  "name": "PWA Test",
+  "short_name": "PWA Test",
+  "description": "Minimal PWA install test",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f0f4ff",
-  "theme_color": "#4f6ef7",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
   "icons": [
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
@@ -28,7 +22,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "categories": ["finance", "utilities"],
-  "lang": "en"
+  ]
 }
