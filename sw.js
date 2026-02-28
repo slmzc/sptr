@@ -65,49 +65,35 @@ self.addEventListener('activate', function(event) {
 
 // ── FETCH ────────────────────────────────────────────────────
 self.addEventListener('fetch', function(event) {
-  var url = event.request.url;
 
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
-  // Always go to network for third-party/config URLs
-  var isNetworkOnly = NETWORK_ONLY.some(function(pattern) {
-    return url.indexOf(pattern) !== -1;
-  });
-  if (isNetworkOnly) return;
+  const url = new URL(event.request.url);
 
+  // Ignore external / config
+  if (url.pathname.includes('config.js') ||
+      url.hostname.includes('googleapis') ||
+      url.hostname.includes('emailjs')) {
+    return;
+  }
+
+  // Navigation requests (important for PWA installability)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match('/index.html').then(function(response) {
+        return response || fetch(event.request);
+      })
+    );
+    return;
+  }
+
+  // Static assets
   event.respondWith(
-    // Cache-first for navigation — guarantees start_url returns 200 offline
-    // which is required for Chrome installability check
-    event.request.mode === 'navigate'
-      ? caches.match('/index.html').then(function(cached) {
-          if (cached) {
-            // Refresh cache in background
-            fetch(event.request).then(function(response) {
-              caches.open(CACHE_NAME).then(function(c) {
-                c.put('/index.html', response);
-              });
-            }).catch(function() {});
-            return cached;
-          }
-          // Not in cache yet — fetch and store
-          return fetch(event.request).then(function(response) {
-            var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(c) {
-              c.put('/index.html', clone);
-            });
-            return response;
-          });
-        })
-      // Cache-first for static assets
-      : caches.match(event.request).then(function(cached) {
-          return cached || fetch(event.request).then(function(response) {
-            var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(c) { c.put(event.request, clone); });
-            return response;
-          });
-        })
+    caches.match(event.request).then(function(response) {
+      return response || fetch(event.request);
+    })
   );
+
 });
 
 // ── SKIP WAITING (triggered by update banner) ─────────────────
