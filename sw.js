@@ -1,104 +1,47 @@
-// ─────────────────────────────────────────────────────────────
-//  sw.js — SpendTrack Service Worker
-//  Caches app shell for offline use; always fetches config.js
-//  fresh so Vercel env vars are never stale.
-// ─────────────────────────────────────────────────────────────
+// ── Minimal PWA Test Service Worker ──────────────────────────
+const CACHE = 'pwa-test-v1';
 
-const CACHE_NAME = 'spendtrack-v5';
-
-// Core files — MUST exist or SW install fails
-const PRECACHE_CORE = [
-  '/',
-  '/index.html',
-  '/?source=pwa',
-  '/manifest.json'
-];
-
-// Optional files — cached if available, skipped silently if 404
-const PRECACHE_OPTIONAL = [
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png'
-];
-
-// Never cache these — always fetch from network
-const NETWORK_ONLY = [
-  '/config.js',
-  'googleapis',
-  'emailjs'
-];
-
-// ── INSTALL ──────────────────────────────────────────────────
-self.addEventListener('install', function(event) {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      // Core files must succeed
-      return cache.addAll(PRECACHE_CORE).then(function() {
-        // Optional files — cache individually, ignore failures
-        return Promise.all(
-          PRECACHE_OPTIONAL.map(function(url) {
-            return cache.add(url).catch(function() {
-              console.log('[SW] Optional file not found, skipping:', url);
-            });
-          })
-        );
-      });
+self.addEventListener('install', function(e) {
+  e.waitUntil(
+    caches.open(CACHE).then(function(c) {
+      return c.add('/index.html');
     }).then(function() {
       return self.skipWaiting();
     })
   );
 });
 
-// ── ACTIVATE ─────────────────────────────────────────────────
-self.addEventListener('activate', function(event) {
-  event.waitUntil(
-    caches.keys().then(function(keys) {
-      return Promise.all(
-        keys.filter(function(k) { return k !== CACHE_NAME; })
-            .map(function(k) { return caches.delete(k); })
-      );
-    }).then(function() {
-      return self.clients.claim();
-    })
-  );
+self.addEventListener('activate', function(e) {
+  e.waitUntil(self.clients.claim());
 });
 
-// ── FETCH ────────────────────────────────────────────────────
-self.addEventListener('fetch', function(event) {
+self.addEventListener('fetch', function(e) {
+  if (e.request.method !== 'GET') return;
 
-  if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-
-  // Ignore external / config
-  if (url.pathname.includes('config.js') ||
-      url.hostname.includes('googleapis') ||
-      url.hostname.includes('emailjs')) {
-    return;
-  }
-
-  // Navigation requests (important for PWA installability)
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      caches.match('/index.html').then(function(response) {
-        return response || fetch(event.request);
+  // All navigation requests → serve index.html from cache
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      caches.match('/index.html').then(function(cached) {
+        return cached || fetch(e.request).then(function(res) {
+          return caches.open(CACHE).then(function(c) {
+            c.put('/index.html', res.clone());
+            return res;
+          });
+        });
       })
     );
     return;
   }
 
-  // Static assets
-  event.respondWith(
-    caches.match(event.request).then(function(response) {
-      return response || fetch(event.request);
+  // Everything else — network with cache fallback
+  e.respondWith(
+    fetch(e.request).then(function(res) {
+      return caches.open(CACHE).then(function(c) {
+        c.put(e.request, res.clone());
+        return res;
+      });
+    }).catch(function() {
+      return caches.match(e.request);
     })
   );
-
-});
-
-// ── SKIP WAITING (triggered by update banner) ─────────────────
-self.addEventListener('message', function(event) {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });
