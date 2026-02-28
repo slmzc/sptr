@@ -4,7 +4,7 @@
 //  fresh so Vercel env vars are never stale.
 // ─────────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'spendtrack-v4';
+const CACHE_NAME = 'spendtrack-v5';
 
 // Core files — MUST exist or SW install fails
 const PRECACHE_CORE = [
@@ -74,17 +74,28 @@ self.addEventListener('fetch', function(event) {
   if (isNetworkOnly) return;
 
   event.respondWith(
-    // Network-first for navigation so updates are immediate
+    // Cache-first for navigation — guarantees start_url returns 200 offline
+    // which is required for Chrome installability check
     event.request.mode === 'navigate'
-      ? fetch(event.request)
-          .then(function(response) {
+      ? caches.match('/index.html').then(function(cached) {
+          if (cached) {
+            // Refresh cache in background
+            fetch(event.request).then(function(response) {
+              caches.open(CACHE_NAME).then(function(c) {
+                c.put('/index.html', response);
+              });
+            }).catch(function() {});
+            return cached;
+          }
+          // Not in cache yet — fetch and store
+          return fetch(event.request).then(function(response) {
             var clone = response.clone();
             caches.open(CACHE_NAME).then(function(c) {
               c.put('/index.html', clone);
             });
             return response;
-          })
-          .catch(function() { return caches.match('/index.html'); })
+          });
+        })
       // Cache-first for static assets
       : caches.match(event.request).then(function(cached) {
           return cached || fetch(event.request).then(function(response) {
