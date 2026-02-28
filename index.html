@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PWA Test</title>
+
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PWA Test">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 24px;
+      text-align: center;
+    }
+    .icon { font-size: 64px; }
+    h1 { font-size: 28px; font-weight: 700; }
+    p { color: #a0a0c0; font-size: 15px; line-height: 1.6; max-width: 300px; }
+    .status-box {
+      background: #16213e;
+      border: 1px solid #2a2a5a;
+      border-radius: 16px;
+      padding: 20px 24px;
+      width: 100%;
+      max-width: 360px;
+      text-align: left;
+    }
+    .status-box h2 { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #a0a0c0; margin-bottom: 14px; }
+    .check { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #2a2a5a; font-size: 14px; }
+    .check:last-child { border-bottom: none; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #555; }
+    .dot.ok { background: #00e676; box-shadow: 0 0 8px #00e676; }
+    .dot.fail { background: #ff5252; box-shadow: 0 0 8px #ff5252; }
+    .dot.wait { background: #ffb300; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .install-btn {
+      display: none;
+      background: linear-gradient(135deg, #4f6ef7, #a855f7);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 4px 20px rgba(79,110,247,.4);
+    }
+    .install-btn.visible { display: block; }
+    .badge {
+      background: #0f3460;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #7eb8ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">📱</div>
+  <div>
+    <h1>PWA Install Test</h1>
+    <p>Checking if your browser can install this as a PWA</p>
+  </div>
+
+  <div class="status-box">
+    <h2>Diagnostics</h2>
+    <div class="check"><div class="dot ok" id="d-https"></div><span id="t-https">HTTPS / localhost</span></div>
+    <div class="check"><div class="dot wait" id="d-sw"></div><span id="t-sw">Service Worker...</span></div>
+    <div class="check"><div class="dot wait" id="d-manifest"></div><span id="t-manifest">Manifest...</span></div>
+    <div class="check"><div class="dot wait" id="d-install"></div><span id="t-install">Install prompt...</span></div>
+  </div>
+
+  <button class="install-btn" id="install-btn" onclick="installApp()">
+    ⬇️ Install App
+  </button>
+
+  <span class="badge" id="mode-badge">browser tab</span>
+
+  <script>
+    var deferredPrompt = null;
+
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+      document.getElementById('mode-badge').textContent = '✅ Running as PWA';
+      document.getElementById('mode-badge').style.background = '#0a3d2e';
+      document.getElementById('mode-badge').style.color = '#00e676';
+    }
+
+    // HTTPS check
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      setDot('https', 'fail');
+      setText('https', '❌ Not HTTPS — PWA requires HTTPS');
+    }
+
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(function(reg) {
+          setDot('sw', 'ok');
+          setText('sw', 'Service Worker registered ✓');
+        })
+        .catch(function(err) {
+          setDot('sw', 'fail');
+          setText('sw', 'SW failed: ' + err.message);
+          console.error('[PWA Test] SW error:', err);
+        });
+    } else {
+      setDot('sw', 'fail');
+      setText('sw', 'Service Workers not supported');
+    }
+
+    // Manifest check
+    fetch('/manifest.json')
+      .then(function(r) {
+        if (r.ok) {
+          setDot('manifest', 'ok');
+          setText('manifest', 'manifest.json loaded ✓');
+        } else {
+          setDot('manifest', 'fail');
+          setText('manifest', 'manifest.json → HTTP ' + r.status);
+        }
+      })
+      .catch(function() {
+        setDot('manifest', 'fail');
+        setText('manifest', 'manifest.json not found');
+      });
+
+    // Install prompt
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      setDot('install', 'ok');
+      setText('install', 'Install prompt ready ✓');
+      document.getElementById('install-btn').classList.add('visible');
+    });
+
+    window.addEventListener('appinstalled', function() {
+      document.getElementById('install-btn').classList.remove('visible');
+      document.getElementById('mode-badge').textContent = '✅ Installed!';
+      document.getElementById('mode-badge').style.background = '#0a3d2e';
+      document.getElementById('mode-badge').style.color = '#00e676';
+    });
+
+    // If no prompt after 4s mark as failed
+    setTimeout(function() {
+      if (document.getElementById('d-install').className.indexOf('ok') === -1) {
+        setDot('install', 'fail');
+        setText('install', 'No install prompt — check DevTools');
+      }
+    }, 4000);
+
+    function installApp() {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(result) {
+        deferredPrompt = null;
+      });
+    }
+
+    function setDot(id, state) {
+      document.getElementById('d-' + id).className = 'dot ' + state;
+    }
+    function setText(id, text) {
+      document.getElementById('t-' + id).textContent = text;
+    }
+  </script>
+</body>
+</html>
