@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpendTrack PWA Check</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #0f0f1a;
+      color: #fff;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 24px;
+    }
+    h1 { font-size: 20px; font-weight: 700; color: #4f6ef7; }
+    .box {
+      background: #16213e;
+      border: 1px solid #2a2a5a;
+      border-radius: 14px;
+      padding: 16px 20px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .box h2 { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #666; margin-bottom: 12px; }
+    .row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1a1a3a; font-size: 13px; line-height: 1.4; }
+    .row:last-child { border-bottom: none; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; background: #444; }
+    .dot.ok { background: #00e676; box-shadow: 0 0 6px #00e676; }
+    .dot.fail { background: #ff5252; box-shadow: 0 0 6px #ff5252; }
+    .dot.wait { background: #ffb300; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.2} }
+    .install-btn {
+      display: none; background: linear-gradient(135deg,#4f6ef7,#a855f7);
+      color: #fff; border: none; border-radius: 12px; padding: 14px 28px;
+      font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+      max-width: 400px;
+    }
+    .install-btn.show { display: block; }
+    a { color: #4f6ef7; font-size: 13px; margin-top: 8px; display: block; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>🔍 SpendTrack PWA Diagnostics</h1>
+
+  <div class="box">
+    <h2>Environment</h2>
+    <div class="row"><div class="dot" id="d-https"></div><span id="t-https">Checking HTTPS...</span></div>
+    <div class="row"><div class="dot" id="d-standalone"></div><span id="t-standalone">Checking mode...</span></div>
+  </div>
+
+  <div class="box">
+    <h2>Files</h2>
+    <div class="row"><div class="dot wait" id="d-config"></div><span id="t-config">config.js...</span></div>
+    <div class="row"><div class="dot wait" id="d-manifest"></div><span id="t-manifest">manifest.json...</span></div>
+    <div class="row"><div class="dot wait" id="d-sw-file"></div><span id="t-sw-file">sw.js...</span></div>
+    <div class="row"><div class="dot wait" id="d-i192"></div><span id="t-i192">icon-192.png...</span></div>
+    <div class="row"><div class="dot wait" id="d-i512"></div><span id="t-i512">icon-512.png...</span></div>
+    <div class="row"><div class="dot wait" id="d-ati"></div><span id="t-ati">apple-touch-icon.png...</span></div>
+  </div>
+
+  <div class="box">
+    <h2>PWA</h2>
+    <div class="row"><div class="dot wait" id="d-sw"></div><span id="t-sw">Service Worker registration...</span></div>
+    <div class="row"><div class="dot wait" id="d-prompt"></div><span id="t-prompt">Install prompt (waiting up to 6s)...</span></div>
+  </div>
+
+  <button class="install-btn" id="install-btn" onclick="install()">⬇️ Install SpendTrack</button>
+  <a href="/">← Back to App</a>
+
+  <script>
+    var deferred = null;
+
+    // HTTPS
+    if (location.protocol === 'https:' || location.hostname === 'localhost') {
+      ok('https', 'HTTPS ✓ (' + location.hostname + ')');
+    } else {
+      fail('https', 'NOT HTTPS — PWA blocked');
+    }
+
+    // Standalone
+    if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+      ok('standalone', '✅ Already running as PWA');
+    } else {
+      set('standalone', 'wait', 'Running in browser tab');
+    }
+
+    // File checks
+    checkFile('/config.js',             'config', 'config.js');
+    checkFile('/manifest.json',         'manifest', 'manifest.json');
+    checkFile('/sw.js',                 'sw-file', 'sw.js');
+    checkFile('/icon-192.png',          'i192', 'icon-192.png');
+    checkFile('/icon-512.png',          'i512', 'icon-512.png');
+    checkFile('/apple-touch-icon.png',  'ati', 'apple-touch-icon.png');
+
+    // SW registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(function(reg) {
+          ok('sw', 'Service Worker registered ✓ scope: ' + reg.scope);
+        })
+        .catch(function(err) {
+          fail('sw', 'SW FAILED: ' + err.message);
+        });
+    } else {
+      fail('sw', 'Service Workers not supported');
+    }
+
+    // Install prompt
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferred = e;
+      ok('prompt', '🎉 Install prompt ready!');
+      document.getElementById('install-btn').classList.add('show');
+    });
+
+    setTimeout(function() {
+      if (document.getElementById('d-prompt').className.indexOf('ok') === -1) {
+        fail('prompt', 'No install prompt after 6s — see failed checks above');
+      }
+    }, 6000);
+
+    function checkFile(url, id, label) {
+      fetch(url, { method: 'HEAD' })
+        .then(function(r) {
+          if (r.ok) ok(id, label + ' → HTTP ' + r.status + ' ✓');
+          else fail(id, label + ' → HTTP ' + r.status + ' ❌');
+        })
+        .catch(function() { fail(id, label + ' → network error ❌'); });
+    }
+
+    function install() {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.then(function() { deferred = null; });
+    }
+
+    function ok(id, text)   { set(id, 'ok',   text); }
+    function fail(id, text) { set(id, 'fail', text); }
+    function set(id, state, text) {
+      document.getElementById('d-' + id).className = 'dot ' + state;
+      if (text) document.getElementById('t-' + id).textContent = text;
+    }
+  </script>
+</body>
+</html>
